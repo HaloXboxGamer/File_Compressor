@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Video Compressor</title>
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.2/dist/ffmpeg.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    .progress-container { margin-top: 10px; width: 100%; background: #eee; border-radius: 5px; overflow: hidden; height: 20px; }
+    .progress-bar { height: 100%; width: 0%; background: #4caf50; transition: width 0.3s; }
+    .label { margin-top: 5px; }
+    #download { margin-top: 20px; display: none; }
+  </style>
+</head>
+<body>
+
+  <h2>🎥 Video Compressor (YouTube Style)</h2>
+
+  <p id="status">Initializing...</p>
+
+  <div class="label">FFmpeg Load Progress</div>
+  <div class="progress-container">
+    <div class="progress-bar" id="loadProgressBar"></div>
+  </div>
+
+  <div class="label">Video Compression Progress</div>
+  <div class="progress-container">
+    <div class="progress-bar" id="compressProgressBar"></div>
+  </div>
+
+  <br>
+  <input type="file" id="videoInput" accept="video/*"><br><br>
+  <button onclick="compressVideo()">Compress Video</button>
+
+  <a id="download" download="compressed.mp4">⬇️ Download Compressed Video</a>
+
+  <script>
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ log: true });
+    const status = document.getElementById('status');
+    const loadProgressBar = document.getElementById('loadProgressBar');
+    const compressProgressBar = document.getElementById('compressProgressBar');
+    const downloadLink = document.getElementById('download');
+
+    // Show loading progress for FFmpeg
+    ffmpeg.setProgress(({ ratio }) => {
+      if (!ffmpeg.isLoaded()) {
+        const percent = Math.round(ratio * 100);
+        loadProgressBar.style.width = percent + '%';
+        status.textContent = `Loading FFmpeg: ${percent}%`;
+      }
+    });
+
+    // Load FFmpeg on page load
+    window.addEventListener("load", async () => {
+      try {
+        await ffmpeg.load();
+        loadProgressBar.style.width = '100%';
+        status.textContent = "✅ FFmpeg is ready!";
+      } catch (err) {
+        status.textContent = "❌ Failed to load FFmpeg.";
+        console.error(err);
+      }
+    });
+
+    async function compressVideo() {
+      const input = document.getElementById('videoInput');
+
+      if (!input.files.length) {
+        alert('Please upload a video file first!');
+        return;
+      }
+
+      const file = input.files[0];
+      const fileName = 'input.mp4';
+      const outputName = 'output.mp4';
+
+      // Reset UI
+      compressProgressBar.style.width = '0%';
+      downloadLink.style.display = 'none';
+
+      ffmpeg.setProgress(({ ratio }) => {
+        if (ffmpeg.isLoaded()) {
+          const percent = Math.round(ratio * 100);
+          compressProgressBar.style.width = percent + '%';
+          status.textContent = `Compressing: ${percent}%`;
+        }
+      });
+
+      try {
+        status.textContent = 'Preparing video...';
+        ffmpeg.FS('writeFile', fileName, await fetchFile(file));
+
+        status.textContent = 'Compressing video...';
+        await ffmpeg.run('-i', fileName, '-vcodec', 'libx264', '-crf', '28', outputName);
+
+        status.textContent = 'Finalizing...';
+        const data = ffmpeg.FS('readFile', outputName);
+        const videoBlob = new Blob([data.buffer], { type: 'video/mp4' });
+        const url = URL.createObjectURL(videoBlob);
+
+        downloadLink.href = url;
+        downloadLink.style.display = 'inline-block';
+        status.textContent = '✅ Compression complete!';
+      } catch (err) {
+        console.error(err);
+        status.textContent = '❌ Compression failed.';
+      }
+    }
+  </script>
+
+</body>
+</html>
